@@ -26,6 +26,28 @@ class _Dataset(tud.Dataset):
         return x, self.y[idx]
 
 
+class _Augment(tud.Dataset):
+    def __init__(self, ds: tud.Dataset, trim_prob: float, trim_min: float) -> None:
+        self.ds = ds
+        self.trim_prob = trim_prob
+        self.trim_min = trim_min
+
+    def __len__(self):
+        return len(self.ds)
+
+    def _augment(self, x):
+        length: int = x.shape[0]
+        trimmed: int = int(torch.randint(int(length*self.trim_min), length, ()))
+        offset = torch.randint(length-trimmed, ()).item()
+        return x[offset:(offset+trimmed)]
+
+    def __getitem__(self, idx):
+        x, y = self.ds[idx]
+        if self.trim_prob and (float(torch.rand(())) < self.trim_prob):
+            x = self._augment(x)
+        return x, y
+
+
 class Cinc2017:
     N_FEATURES = 1
     CATS = ['N', 'A', 'O', '~']
@@ -91,11 +113,12 @@ class Cinc2017:
         y = torch.tensor(ys, dtype=torch.long)
         return xs, y
 
-    def __call__(self, batch_size: int) -> Data:
+    def __call__(self, batch_size: int, trim_prob: float, trim_min: float) -> Data:
         self._download()
         for train_ds, val_ds in self._setup():
             train_dl = tud.DataLoader(
-                train_ds, batch_size,
+                _Augment(train_ds, trim_prob, trim_min),
+                batch_size,
                 shuffle=True,
                 collate_fn=self._collate)
             val_dl = tud.DataLoader(

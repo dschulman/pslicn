@@ -36,6 +36,8 @@ class Params(experiment.Params):
     leak: float = 0.0
     layer_norm: bool = False
     batch_size: int = 32
+    trim_prob: float = 0.9
+    trim_min: float = 0.5
     lr: float = 0.001
 
 
@@ -89,7 +91,7 @@ class Experiment(experiment.Experiment):
 
     def data(self, params: Params, folds: int, rseed: int) -> Data:
         data = Cinc2017(n_folds=folds, split_seed=rseed)
-        return data(params.batch_size)
+        return data(params.batch_size, params.trim_prob, params.trim_min)
 
     def model(self, params: Params) -> nn.Module:
         return model.Classify(
