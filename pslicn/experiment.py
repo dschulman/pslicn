@@ -356,6 +356,6 @@ class Experiment(ABC):
                             batch = _to_device(batch, device)
                             step(model, batch)
                             bt.set_postfix(Loss=step.compute_loss())
-                self._results(s.db, s.eid, start, datetime.now(), fold, epoch, Phase.Train, step.compute())
+                self._results(s.db, s.eid, start, datetime.now(), fold, epoch, Phase.Val, step.compute())
                 if ((epoch + 1) == params.epochs) or ((epoch + 1) % s.checkpoint == 0):
                     _save_checkpoint(s.out, s.eid, fold, epoch + 1, model, optimizer)
