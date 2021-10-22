@@ -277,7 +277,7 @@ class Experiment(ABC):
             row = res.first()
         if row is None:
             return None
-        params = Params()
+        params = self.default_params()
         for k in row.keys():
             if hasattr(params, k):
                 setattr(params, k, row[k])
