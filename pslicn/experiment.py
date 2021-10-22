@@ -17,6 +17,7 @@ import sqlalchemy.types as sqlt
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torchmetrics as tmet
 from tqdm.auto import tqdm
 from typing import Any, Generator, Optional, Tuple, Type
 from .data import Data
@@ -39,6 +40,10 @@ class Phase(Enum):
 
 class Step(nn.Module, ABC):
     def reset(self) -> None:
+        def reset_child(m: nn.Module) -> None:
+            if isinstance(m, tmet.Metric):
+                m.reset()
+        self.apply(reset_child)
         self.total_loss = 0.0
         self.total_size = 0
 
