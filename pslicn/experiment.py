@@ -30,7 +30,7 @@ class Metrics:
 
 @dataclass
 class Params:
-    epochs: int = 150
+    epochs: int = 200
 
 
 class Phase(Enum):
