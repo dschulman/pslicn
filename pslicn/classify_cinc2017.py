@@ -14,8 +14,10 @@ class Metrics(experiment.Metrics):
     accuracy: float
     accuracy_perclass: np.ndarray
     f1: float
+    f1_nao: float
     f1_perclass: np.ndarray
     auroc: float
+    auroc_nao: float
     auroc_perclass: np.ndarray
     confusion: np.ndarray
 
@@ -67,14 +69,16 @@ class Step(experiment.Step):
 
     def compute(self) -> Metrics:
         f1 = self.f1.compute().cpu().numpy()
-        auroc = self.f1.compute().cpu().numpy()
+        auroc = self.auroc.compute().cpu().numpy()
         return Metrics(
             loss = self.compute_loss(),
             accuracy = self.accuracy.compute().item(),
             accuracy_perclass = self.accuracy_perclass.compute().cpu().numpy(),
             f1 = f1.mean(),
+            f1_nao = f1[:-1].mean(),
             f1_perclass = f1,
             auroc = auroc.mean(),
+            auroc_nao = auroc[:-1].mean(),
             auroc_perclass = auroc,
             confusion = self.confusion.compute().cpu().numpy())
 
