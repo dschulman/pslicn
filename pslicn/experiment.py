@@ -18,7 +18,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torchmetrics as tmet
-from tqdm.auto import tqdm
+from tqdm import tqdm
 from typing import Any, Generator, Optional, Tuple, Type
 from .data import Data
 

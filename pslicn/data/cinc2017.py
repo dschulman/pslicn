@@ -7,7 +7,7 @@ import shutil
 import sklearn.model_selection as skms
 import torch
 import torch.utils.data as tud
-from tqdm.auto import tqdm
+from tqdm import tqdm
 from typing import Generator, List, Tuple
 import zipfile
 from . import Data
