@@ -81,6 +81,7 @@ class _Setup:
     folds: int
     rseed: int
     checkpoint: int
+    params: Params
 
 
 class _NumpyType(sqlt.TypeDecorator):
@@ -217,7 +218,57 @@ class Experiment(ABC):
     def step(self) -> Step:
         raise NotImplementedError()
 
-    def _setup(self) -> Tuple[_Setup, Params]:
+    def _setup_out(self, out:Optional[str] = None) -> Tuple[str, Engine]:
+        if out is None:
+            out = os.path.join('results', self.default_name())
+        os.makedirs(out, exist_ok=True)
+        db = sqlalchemy.create_engine(f'sqlite+pysqlite:///{out}/experiments.db')
+        self.metadata.create_all(db)
+        return out, db
+
+    def setup_new(
+            self,
+            out:Optional[str] = None,
+            gpu: bool = True,
+            folds: int = 5,
+            seed: int = 1234,
+            checkpoint: int = 25,
+            params: Optional[Params] = None) -> _Setup:
+        out, db = self._setup_out(out)
+        if params is None:
+            params = self.default_params()
+        eid = self._start(db, folds, seed, params)
+        return _Setup(
+            db=db,
+            eid=eid,
+            gpu=gpu,
+            out=out,
+            folds=folds,
+            rseed=seed,
+            checkpoint=checkpoint,
+            params=params)
+
+    def setup_resume(
+            self,
+            eid:int,
+            out:Optional[str] = None,
+            gpu:bool = True,
+            checkpoint:int = 25) -> _Setup:
+        out, db = self._setup_out(out)
+        resume = self._resume(db, eid)
+        if resume is None:
+            raise ValueError(f'Experiment {eid} not found')
+        return _Setup(
+            db=db,
+            eid=eid,
+            gpu=gpu,
+            out=out,
+            folds=resume.folds,
+            rseed=resume.rseed,
+            checkpoint=checkpoint,
+            params=resume.params)
+
+    def _setup_from_args(self) -> _Setup:
         parser = argparse.ArgumentParser()
         parser.add_argument(
             '--no_gpu', dest='gpu', action='store_false',
@@ -241,38 +292,21 @@ class Experiment(ABC):
             'override', nargs='*',
             help='Hyperparameter overrides')
         args = parser.parse_args()
-        os.makedirs(args.out, exist_ok=True)
-        db = sqlalchemy.create_engine(f'sqlite+pysqlite:///{args.out}/experiments.db')
-        self.metadata.create_all(db)
         if args.resume is not None:
-            resume = self._resume(db, args.resume)
-            if resume is None:
-                raise ValueError(f'Experiment {args.resume} not found')
-            elif len(args.override) > 0:
+            if len(args.override) > 0:
                 raise ValueError('Cannot override hyperparams when resuming')
-            setup = _Setup(
-                db=db,
-                eid=args.resume,
-                gpu=args.gpu,
-                out=args.out,
-                folds=resume.folds,
-                rseed=resume.rseed,
-                checkpoint=args.checkpoint)
-            return setup, resume.params
+            return self.setup_resume(args.resume, args.out, args.gpu, args.checkpoint)
         else:
             params = OmegaConf.merge(
                 OmegaConf.structured(self.default_params()),
                 OmegaConf.from_cli(args.override))
-            eid = self._start(db, args.folds, args.seed, params)
-            setup = _Setup(
-                db=db,
-                eid=eid,
-                gpu=args.gpu,
+            return self.setup_new(
                 out=args.out,
+                gpu=args.gpu,
                 folds=args.folds,
-                rseed=args.seed,
-                checkpoint=args.checkpoint)
-            return setup, params
+                seed=args.seed,
+                checkpoint=args.checkpoint,
+                params=params)
 
     def _resume(self, db: Engine, expt_id: int) -> Optional[_Resume]:
         with db.begin() as conn:
@@ -327,19 +361,18 @@ class Experiment(ABC):
                     phase=phase.name,
                     **dataclasses.asdict(metrics)))
 
-    def run(self) -> None:
-        s, params = self._setup()
-        print(OmegaConf.to_yaml(params))
+    def run(self, s:_Setup) -> None:
+        print(OmegaConf.to_yaml(s.params))
         device = torch.device('cuda' if s.gpu and torch.cuda.is_available() else 'cpu')
-        for fold, (train_dl, val_dl) in enumerate(self.data(params, s.folds, s.rseed)):
-            model = self.model(params)
+        for fold, (train_dl, val_dl) in enumerate(self.data(s.params, s.folds, s.rseed)):
+            model = self.model(s.params)
             model.to(device)
-            optimizer = self.optimizer(model, params)
+            optimizer = self.optimizer(model, s.params)
             start_epoch = _load_checkpoint(s.out, s.eid, fold, model, optimizer)
             step = self.step()
             step.to(device)
             self._start_fold(s.db, s.eid, fold, start_epoch)
-            for epoch in range(start_epoch, params.epochs):
+            for epoch in range(start_epoch, s.params.epochs):
                 model.train()
                 step.reset()
                 start = datetime.now()
@@ -362,5 +395,9 @@ class Experiment(ABC):
                             step(model, batch)
                             bt.set_postfix(Loss=step.compute_loss())
                 self._results(s.db, s.eid, start, datetime.now(), fold, epoch, Phase.Val, step.compute())
-                if ((epoch + 1) == params.epochs) or ((epoch + 1) % s.checkpoint == 0):
+                if ((epoch + 1) == s.params.epochs) or ((epoch + 1) % s.checkpoint == 0):
                     _save_checkpoint(s.out, s.eid, fold, epoch + 1, model, optimizer)
+
+    def main(self):
+        s = self._setup_from_args()
+        self.run(s)
