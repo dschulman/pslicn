@@ -315,7 +315,7 @@ class Experiment(ABC):
                 folds=args.folds,
                 seed=args.seed,
                 checkpoint=args.checkpoint,
-                params=params)
+                params=OmegaConf.to_object(params))
 
     def _resume(self, db: Engine, expt_id: int) -> Optional[_Resume]:
         with db.begin() as conn:
@@ -334,8 +334,8 @@ class Experiment(ABC):
             rseed=row.rseed,
             params=params)
 
-    def _start(self, db: Engine, folds: int, rseed: int, params: Mapping) -> int:
-        params = dict(**params)
+    def _start(self, db: Engine, folds: int, rseed: int, params: Params) -> int:
+        params = dataclasses.asdict(params)
         for k, v in params.items():
             if isinstance(v, Enum):
                 params[k] = v.name
