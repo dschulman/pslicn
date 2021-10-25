@@ -397,7 +397,7 @@ class Experiment(ABC):
                 model.eval()
                 step.reset()
                 start = datetime.now()
-                with torch.inference_mode():
+                with torch.no_grad():
                     with tqdm(val_dl, desc=f'Fold {fold}/Epoch {epoch}/Val') as bt:
                         for batch in bt:
                             batch = _to_device(batch, device)
