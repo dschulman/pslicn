@@ -93,8 +93,8 @@ class Experiment(experiment.Experiment):
     def default_name(self) -> str:
         return 'classify_cinc2017'
 
-    def data(self, params: Params, folds: int, rseed: int) -> Data:
-        data = Cinc2017(n_folds=folds, split_seed=rseed)
+    def data(self, base_path: str, params: Params, folds: int, rseed: int) -> Data:
+        data = Cinc2017(base_path=base_path, n_folds=folds, split_seed=rseed)
         return data(params.batch_size, params.trim_prob, params.trim_min)
 
     def model(self, params: Params) -> nn.Module:

@@ -78,6 +78,7 @@ class _Setup:
     eid: int
     gpu: bool
     out: str
+    data: str
     folds: int
     rseed: int
     checkpoint: int
@@ -203,7 +204,7 @@ class Experiment(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def data(self, params: Params, folds: int, rseed: int) -> Data:
+    def data(self, base_path: str, params: Params, folds: int, rseed: int) -> Data:
         raise NotImplementedError()
 
     @abstractmethod
@@ -229,6 +230,7 @@ class Experiment(ABC):
     def setup_new(
             self,
             out:Optional[str] = None,
+            data:str = 'data',
             gpu: bool = True,
             folds: int = 5,
             seed: int = 1234,
@@ -243,6 +245,7 @@ class Experiment(ABC):
             eid=eid,
             gpu=gpu,
             out=out,
+            data=data,
             folds=folds,
             rseed=seed,
             checkpoint=checkpoint,
@@ -252,6 +255,7 @@ class Experiment(ABC):
             self,
             eid:int,
             out:Optional[str] = None,
+            data:str = 'data',
             gpu:bool = True,
             checkpoint:int = 25) -> _Setup:
         out, db = self._setup_out(out)
@@ -263,6 +267,7 @@ class Experiment(ABC):
             eid=eid,
             gpu=gpu,
             out=out,
+            data=data,
             folds=resume.folds,
             rseed=resume.rseed,
             checkpoint=checkpoint,
@@ -276,6 +281,9 @@ class Experiment(ABC):
         parser.add_argument(
             '-o', '--out', default=os.path.join('results', self.default_name()),
             help='Output directory')
+        parser.add_argument(
+            '--data', default='data',
+            help='Data directory')
         parser.add_argument(
             '--resume', type=int, required=False,
             help='Experiment ID to resume')
@@ -295,13 +303,14 @@ class Experiment(ABC):
         if args.resume is not None:
             if len(args.override) > 0:
                 raise ValueError('Cannot override hyperparams when resuming')
-            return self.setup_resume(args.resume, args.out, args.gpu, args.checkpoint)
+            return self.setup_resume(args.resume, args.out, args.data, args.gpu, args.checkpoint)
         else:
             params = OmegaConf.merge(
                 OmegaConf.structured(self.default_params()),
                 OmegaConf.from_cli(args.override))
             return self.setup_new(
                 out=args.out,
+                data=args.data,
                 gpu=args.gpu,
                 folds=args.folds,
                 seed=args.seed,
@@ -364,7 +373,7 @@ class Experiment(ABC):
     def run(self, s:_Setup) -> None:
         print(OmegaConf.to_yaml(s.params))
         device = torch.device('cuda' if s.gpu and torch.cuda.is_available() else 'cpu')
-        for fold, (train_dl, val_dl) in enumerate(self.data(s.params, s.folds, s.rseed)):
+        for fold, (train_dl, val_dl) in enumerate(self.data(s.data, s.params, s.folds, s.rseed)):
             model = self.model(s.params)
             model.to(device)
             optimizer = self.optimizer(model, s.params)

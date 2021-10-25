@@ -52,11 +52,11 @@ class Cinc2017:
     N_FEATURES = 1
     CATS = ['N', 'A', 'O', '~']
     URL = 'https://www.physionet.org/files/challenge-2017/1.0.0/training2017.zip?download'
-    PATH = 'data/cinc2017'
+    PATH = 'cinc2017'
 
     def __init__(
             self,
-            base_path: str = '.',
+            base_path: str = 'data',
             n_folds: int = 5,
             train_pct: float = 0.7,
             split_seed: int = 1234,
