@@ -5,10 +5,10 @@ import requests
 import scipy.io as spio
 import shutil
 import sklearn.model_selection as skms
+import time
 import torch
 import torch.utils.data as tud
-from tqdm import tqdm
-from typing import Generator, List, Tuple
+from typing import List, Tuple
 import zipfile
 from . import Data
 
@@ -75,11 +75,13 @@ class Cinc2017:
             zip_path = os.path.join(tmp_path, 'training2017.zip')
             if not os.path.exists(zip_path):
                 with requests.get(self.URL, stream=True) as r:
-                    chunk_size = 1024
-                    total = int(r.headers.get('content-length', 0)) // chunk_size
+                    start_time = time.time()
+                    print('Downloading Data...')
                     with open(zip_path, 'wb') as f:
-                        for chunk in tqdm(r.iter_content(chunk_size), desc='Downloading Data', total=total):
+                        for chunk in r.iter_content(1024):
                             f.write(chunk)
+                    elapsed_time = time.time() - start_time
+                    print(f'Downloaded in {elapsed_time:.2f} seconds')
             with zipfile.ZipFile(zip_path) as zf:
                 zf.extractall(tmp_path)
             shutil.move(os.path.join(tmp_path, 'training2017'), self.path)
@@ -89,12 +91,16 @@ class Cinc2017:
         ref_path = os.path.join(self.path, 'REFERENCE.csv')
         ref = pd.read_csv(ref_path, names=['id', 'label'])
         xs = np.empty(ref.shape[0], dtype=np.object)
-        for i, mat_id in enumerate(tqdm(ref['id'], desc='Loading Data')):
+        start_time = time.time()
+        print('Loading Data...')
+        for i, mat_id in enumerate(ref['id']):
             path = os.path.join(self.path, f'{mat_id}.mat')
             x = spio.loadmat(path)['val'][0].astype(np.float32)
             x = np.expand_dims(x, -1)
             x = (x - x.mean()) / x.std()
             xs[i] = torch.tensor(x)
+        elapsed_time = time.time() - start_time
+        print(f'Loaded {ref.shape[0]} in {elapsed_time:.2f} seconds')
         y = pd.Categorical(ref['label'].values, self.CATS).codes
         sss = skms.StratifiedShuffleSplit(
             n_splits=self.n_folds,

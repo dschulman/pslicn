@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 import argparse
-from collections.abc import Mapping
 import dataclasses
 from dataclasses import dataclass
 from datetime import datetime
@@ -18,7 +17,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torchmetrics as tmet
-from tqdm import tqdm
 from typing import Any, Generator, Optional, Tuple, Type
 from .data import Data
 
@@ -26,6 +24,9 @@ from .data import Data
 @dataclass
 class Metrics:
     loss: float
+
+    def summary(self) -> str:
+        return f'Loss={self.loss:.3f}'
 
 
 @dataclass
@@ -357,8 +358,11 @@ class Experiment(ABC):
     def _results(self,
                  db: Engine, expt_id: int,
                  start: datetime, finish: datetime,
-                 fold: int, epoch: int, phase: Phase,
+                 fold: int, epoch: int, phase: Phase, batches: int,
                  metrics: Metrics) -> None:
+        elapsed = (finish - start).total_seconds()
+        perbatch = elapsed / batches
+        print(f'Fold {fold}/Epoch {epoch}/{phase.name}: {batches} batches in {elapsed:.1f} s ({perbatch:.3f} s/batch) {metrics.summary()}')
         with db.begin() as conn:
             conn.execute(
                 self.results_table.insert().values(
@@ -385,25 +389,21 @@ class Experiment(ABC):
                 model.train()
                 step.reset()
                 start = datetime.now()
-                with tqdm(train_dl, desc=f'Fold {fold}/Epoch {epoch}/Train') as bt:
-                    for batch in bt:
-                        batch = _to_device(batch, device)
-                        optimizer.zero_grad()
-                        loss = step(model, batch)
-                        loss.backward()
-                        optimizer.step()
-                        bt.set_postfix(Loss=step.compute_loss())
-                self._results(s.db, s.eid, start, datetime.now(), fold, epoch, Phase.Train, step.compute())
+                for batch in train_dl:
+                    batch = _to_device(batch, device)
+                    optimizer.zero_grad()
+                    loss = step(model, batch)
+                    loss.backward()
+                    optimizer.step()
+                self._results(s.db, s.eid, start, datetime.now(), fold, epoch, Phase.Train, len(train_dl), step.compute())
                 model.eval()
                 step.reset()
                 start = datetime.now()
                 with torch.inference_mode():
-                    with tqdm(val_dl, desc=f'Fold {fold}/Epoch {epoch}/Val') as bt:
-                        for batch in bt:
-                            batch = _to_device(batch, device)
-                            step(model, batch)
-                            bt.set_postfix(Loss=step.compute_loss())
-                self._results(s.db, s.eid, start, datetime.now(), fold, epoch, Phase.Val, step.compute())
+                    for batch in val_dl:
+                        batch = _to_device(batch, device)
+                        step(model, batch)
+                self._results(s.db, s.eid, start, datetime.now(), fold, epoch, Phase.Val, len(val_dl), step.compute())
                 if ((epoch + 1) == s.params.epochs) or ((epoch + 1) % s.checkpoint == 0):
                     _save_checkpoint(s.out, s.eid, fold, epoch + 1, model, optimizer)
 

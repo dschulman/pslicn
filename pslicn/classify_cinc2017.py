@@ -21,6 +21,9 @@ class Metrics(experiment.Metrics):
     auroc_perclass: np.ndarray
     confusion: np.ndarray
 
+    def summary(self) -> str:
+        return f'Loss={self.loss:.3f} Acc={self.accuracy:.3f} F1={self.f1_nao:.3f} AUC={self.auroc_nao:.3f}'
+
 
 @dataclass
 class Params(experiment.Params):
