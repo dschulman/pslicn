@@ -5,6 +5,9 @@
       <sourceFolder url="file://$MODULE_DIR$/env/DLLs" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/env/Lib" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/env/Lib/site-packages" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/env/Lib/site-packages/pythonwin" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/env/Lib/site-packages/win32" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/env/Lib/site-packages/win32/lib" isTestSource="false" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

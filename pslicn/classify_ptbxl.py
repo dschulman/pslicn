@@ -4,29 +4,30 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torchmetrics as tmet
-from typing import Any, Tuple, Type
+from typing import Any, List, Tuple, Type
 from . import experiment, model
 from .data import Data
-from .data.cinc2017 import Cinc2017
+from .data.ptbxl import Ptbxl, Task
+
 
 @dataclass
 class Metrics(experiment.Metrics):
     accuracy: float
     accuracy_perclass: np.ndarray
     f1: float
-    f1_nao: float
     f1_perclass: np.ndarray
     auroc: float
-    auroc_nao: float
     auroc_perclass: np.ndarray
     confusion: np.ndarray
 
     def summary(self) -> str:
-        return f'Loss={self.loss:.3f} Acc={self.accuracy:.3f} F1={self.f1_nao:.3f} AUC={self.auroc_nao:.3f}'
+        return f'Loss={self.loss:.3f} Acc={self.accuracy:.3f} F1={self.f1:.3f} AUC={self.auroc:.3f}'
 
 
 @dataclass
 class Params(experiment.Params):
+    task: Task = Task.All
+    high_res: bool = False
     inproj_size: int = 7
     inproj_stride: int = 4
     inproj_norm: bool = False
@@ -47,41 +48,55 @@ class Params(experiment.Params):
 
 
 class Step(experiment.Step):
-    def __init__(self) -> None:
+    def __init__(self, cats: List[str]) -> None:
         super().__init__()
-        n_cls = len(Cinc2017.CATS)
-        self.loss = nn.CrossEntropyLoss()
-        self.accuracy = tmet.Accuracy(compute_on_step=False, num_classes=n_cls)
-        self.accuracy_perclass = tmet.Accuracy(compute_on_step=False, num_classes=n_cls, average=None)
-        self.f1 = tmet.F1(compute_on_step=False, num_classes=n_cls, average=None)
-        self.auroc = tmet.AUROC(compute_on_step=False, num_classes=n_cls, average=None)
-        self.confusion = tmet.ConfusionMatrix(compute_on_step=False, num_classes=n_cls)
+        n_cls = len(cats)
+        self.loss = nn.BCEWithLogitsLoss()
+        self.accuracy = tmet.Accuracy(
+            compute_on_step=False,
+            num_classes=n_cls,
+            average=None,
+            multiclass=False,
+            threshold=0.0)
+        self.f1 = tmet.F1(
+            compute_on_step=False,
+            num_classes=n_cls,
+            average=None,
+            multiclass=False,
+            threshold=0.0)
+        self.auroc = tmet.AUROC(
+            compute_on_step=False,
+            num_classes=n_cls,
+            average=None,
+            pos_label=1)
+        self.confusion = tmet.ConfusionMatrix(
+            compute_on_step=False,
+            num_classes=n_cls,
+            multilabel=True,
+            threshold=0.0)
 
     def _step(self, model: nn.Module, batch: Any) -> Tuple[torch.Tensor, int]:
         x, y = batch
         z = model(x)
-        loss = self.loss(z, y)
+        loss = self.loss(z, y.float())
         with torch.no_grad():
-            zmax = torch.argmax(z, dim=1)
-            self.accuracy(zmax, y)
-            self.accuracy_perclass(zmax, y)
-            self.f1(zmax, y)
-            self.auroc(torch.softmax(z, dim=1), y)
-            self.confusion(zmax, y)
+            self.accuracy(z, y)
+            self.f1(z, y)
+            self.auroc(z, y)
+            self.confusion(z, y)
         return loss, y.shape[0]
 
     def compute(self) -> Metrics:
+        accuracy = self.accuracy.compute().cpu().numpy()
         f1 = self.f1.compute().cpu().numpy()
         auroc = self.auroc.compute().cpu().numpy()
         return Metrics(
             loss = self.compute_loss(),
-            accuracy = self.accuracy.compute().item(),
-            accuracy_perclass = self.accuracy_perclass.compute().cpu().numpy(),
+            accuracy = accuracy.mean(),
+            accuracy_perclass = accuracy,
             f1 = f1.mean(),
-            f1_nao = f1[:-1].mean(),
             f1_perclass = f1,
             auroc = auroc.mean(),
-            auroc_nao = auroc[:-1].mean(),
             auroc_perclass = auroc,
             confusion = self.confusion.compute().cpu().numpy())
 
@@ -94,21 +109,21 @@ class Experiment(experiment.Experiment):
         return Metrics
 
     def default_name(self) -> str:
-        return 'classify_cinc2017'
+        return 'classify_ptbxl'
 
     def data(self, base_path: str, params: Params, folds: int, rseed: int) -> Data:
-        return Cinc2017(
+        return Ptbxl(
+            task = params.task,
             base_path = base_path,
-            n_folds = folds,
-            split_seed = rseed,
+            high_res = params.high_res,
             batch_size = params.batch_size,
             trim_prob = params.trim_prob,
             trim_min = params.trim_min)
 
-    def model(self, params: Params, data: Data) -> nn.Module:
+    def model(self, params: Params, data: Ptbxl) -> nn.Module:
         return model.Classify(
-            features = Cinc2017.N_FEATURES,
-            classes = len(Cinc2017.CATS),
+            features = Ptbxl.N_FEATURES,
+            classes = len(data.cats),
             inproj_size = params.inproj_size,
             inproj_stride = params.inproj_stride,
             inproj_norm = params.inproj_norm,
@@ -128,8 +143,8 @@ class Experiment(experiment.Experiment):
             params = model.parameters(),
             lr = params.lr)
 
-    def step(self, data: Data) -> Step:
-        return Step()
+    def step(self, data: Ptbxl) -> Step:
+        return Step(data.cats)
 
 
 if __name__=='__main__':

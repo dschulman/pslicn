@@ -209,7 +209,7 @@ class Experiment(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def model(self, params: Params) -> nn.Module:
+    def model(self, params: Params, data: Data) -> nn.Module:
         raise NotImplementedError()
 
     @abstractmethod
@@ -217,7 +217,7 @@ class Experiment(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def step(self) -> Step:
+    def step(self, data: Data) -> Step:
         raise NotImplementedError()
 
     def _setup_out(self, out:Optional[str] = None) -> Tuple[str, Engine]:
@@ -377,12 +377,13 @@ class Experiment(ABC):
     def run(self, s:_Setup) -> None:
         print(OmegaConf.to_yaml(s.params))
         device = torch.device('cuda' if s.gpu and torch.cuda.is_available() else 'cpu')
-        for fold, (train_dl, val_dl) in enumerate(self.data(s.data, s.params, s.folds, s.rseed)):
-            model = self.model(s.params)
+        data = self.data(s.data, s.params, s.folds, s.rseed)
+        for fold, (train_dl, val_dl) in enumerate(data):
+            model = self.model(s.params, data)
             model.to(device)
             optimizer = self.optimizer(model, s.params)
             start_epoch = _load_checkpoint(s.out, s.eid, fold, model, optimizer)
-            step = self.step()
+            step = self.step(data)
             step.to(device)
             self._start_fold(s.db, s.eid, fold, start_epoch)
             for epoch in range(start_epoch, s.params.epochs):
