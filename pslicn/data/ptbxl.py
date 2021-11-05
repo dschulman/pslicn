@@ -55,9 +55,9 @@ class Ptbxl(Data):
         self.batch_size = batch_size
         self.trim_prob = trim_prob
         self.trim_min = trim_min
+        utils.download_and_unzip(self.URL, self.INNER_NAME, self.path)
         scp_path = os.path.join(self.path, 'scp_statements.csv')
         self.scp = pd.read_csv(scp_path, index_col = 0)
-        utils.download_and_unzip(self.URL, self.INNER_NAME, self.path)
         self.train_ds, self.val_ds, self.cats = self._setup()
 
     @property
