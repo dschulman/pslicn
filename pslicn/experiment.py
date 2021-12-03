@@ -48,14 +48,14 @@ class Step(nn.Module, ABC):
         self.total_loss = 0.0
         self.total_size = 0
 
-    def __call__(self, model: nn.Module, batch: Any) -> torch.Tensor:
-        loss, size = self._step(model, batch)
+    def __call__(self, model: nn.Module, batch: Any, phase: Phase) -> torch.Tensor:
+        loss, size = self._step(model, batch, phase)
         self.total_loss += loss.item() * size
         self.total_size += size
         return loss
 
     @abstractmethod
-    def _step(self, model: nn.Module, batch: Any) -> Tuple[torch.Tensor, int]:
+    def _step(self, model: nn.Module, batch: Any, phase: Phase) -> Tuple[torch.Tensor, int]:
         raise NotImplementedError()
 
     def compute_loss(self) -> float:
@@ -393,7 +393,7 @@ class Experiment(ABC):
                 for batch in train_dl:
                     batch = _to_device(batch, device)
                     optimizer.zero_grad()
-                    loss = step(model, batch)
+                    loss = step(model, batch, Phase.Train)
                     loss.backward()
                     optimizer.step()
                 self._results(s.db, s.eid, start, datetime.now(), fold, epoch, Phase.Train, len(train_dl), step.compute())
@@ -403,7 +403,7 @@ class Experiment(ABC):
                 with torch.inference_mode():
                     for batch in val_dl:
                         batch = _to_device(batch, device)
-                        step(model, batch)
+                        step(model, batch, Phase.Val)
                 self._results(s.db, s.eid, start, datetime.now(), fold, epoch, Phase.Val, len(val_dl), step.compute())
                 if ((epoch + 1) == s.params.epochs) or ((epoch + 1) % s.checkpoint == 0):
                     _save_checkpoint(s.out, s.eid, fold, epoch + 1, model, optimizer)

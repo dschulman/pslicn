@@ -8,6 +8,7 @@ from typing import Any, List, Tuple, Type
 from . import experiment, model
 from .data import Data
 from .data.ptbxl import Ptbxl, Task
+from .experiment import Phase
 
 
 @dataclass
@@ -44,6 +45,7 @@ class Params(experiment.Params):
     batch_size: int = 32
     trim_prob: float = 0.9
     trim_min: float = 0.5
+    val_aug: int = 10
     lr: float = 0.001
 
 
@@ -75,9 +77,11 @@ class Step(experiment.Step):
             multilabel=True,
             threshold=0.0)
 
-    def _step(self, model: nn.Module, batch: Any) -> Tuple[torch.Tensor, int]:
+    def _step(self, model: nn.Module, batch: Any, phase: Phase) -> Tuple[torch.Tensor, int]:
         x, y = batch
         z = model(x)
+        if phase == Phase.Val:
+            z = z.view(y.shape[0], -1, z.shape[1]).mean(dim=1)
         loss = self.loss(z, y.float())
         with torch.no_grad():
             self.accuracy(z, y)
@@ -118,7 +122,8 @@ class Experiment(experiment.Experiment):
             high_res = params.high_res,
             batch_size = params.batch_size,
             trim_prob = params.trim_prob,
-            trim_min = params.trim_min)
+            trim_min = params.trim_min,
+            val_aug = params.val_aug)
 
     def model(self, params: Params, data: Ptbxl) -> nn.Module:
         return model.Classify(

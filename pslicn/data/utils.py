@@ -42,6 +42,13 @@ class _Dataset(tud.Dataset):
         return x, self.y[idx]
 
 
+def _augment(x: torch.Tensor, trim_min: float) -> torch.Tensor:
+    length: int = x.shape[0]
+    trimmed: int = int(torch.randint(int(length * trim_min), length, ()))
+    offset = torch.randint(length - trimmed, ()).item()
+    return x[offset:(offset + trimmed)]
+
+
 class _Augment(tud.Dataset):
     def __init__(self, ds: tud.Dataset, trim_prob: float, trim_min: float) -> None:
         self.ds = ds
@@ -51,14 +58,23 @@ class _Augment(tud.Dataset):
     def __len__(self):
         return len(self.ds)
 
-    def _augment(self, x):
-        length: int = x.shape[0]
-        trimmed: int = int(torch.randint(int(length*self.trim_min), length, ()))
-        offset = torch.randint(length-trimmed, ()).item()
-        return x[offset:(offset+trimmed)]
-
     def __getitem__(self, idx):
         x, y = self.ds[idx]
         if self.trim_prob and (float(torch.rand(())) < self.trim_prob):
-            x = self._augment(x)
+            x = _augment(x, self.trim_min)
         return x, y
+
+
+class _TestAugment(tud.Dataset):
+    def __init__(self, ds: tud.Dataset, n_aug: int, trim_min: float) -> None:
+        self.ds = ds
+        self.n_aug = n_aug
+        self.trim_min = trim_min
+
+    def __len__(self):
+        return len(self.ds)
+
+    def __getitem__(self, idx):
+        x, y = self.ds[idx]
+        xs = [_augment(x, self.trim_min) for _ in range(self.n_aug)]
+        return xs, y

@@ -9,7 +9,7 @@ import torch.utils.data as tud
 from typing import Dict, List, Set, Tuple
 import wfdb
 from . import utils, Data, DataLoaders
-from .utils import _Dataset, _Augment
+from .utils import _Dataset, _Augment, _TestAugment
 
 
 @unique
@@ -48,6 +48,7 @@ class Ptbxl(Data):
             batch_size: int = 32,
             trim_prob: float = 0.9,
             trim_min: float = 0.5,
+            val_aug: int = 10,
     ) -> None:
         self.task = task
         self.path = os.path.join(base_path, self.PATH)
@@ -55,6 +56,7 @@ class Ptbxl(Data):
         self.batch_size = batch_size
         self.trim_prob = trim_prob
         self.trim_min = trim_min
+        self.val_aug = val_aug
         utils.download_and_unzip(self.URL, self.INNER_NAME, self.path)
         scp_path = os.path.join(self.path, 'scp_statements.csv')
         self.scp = pd.read_csv(scp_path, index_col = 0)
@@ -108,10 +110,19 @@ class Ptbxl(Data):
         return train_ds, val_ds, cats
 
     @staticmethod
-    def _collate(
+    def _collate_train(
             batch: List[Tuple[torch.Tensor, torch.Tensor]],
     ) -> Tuple[List[torch.Tensor], torch.Tensor]:
         xs, ys = zip(*batch)
+        y = torch.stack(ys, dim=0)
+        return xs, y
+
+    @staticmethod
+    def _collate_val(
+            batch: List[Tuple[List[torch.Tensor], torch.Tensor]],
+    ) -> Tuple[List[torch.Tensor], torch.Tensor]:
+        xss, ys = zip(*batch)
+        xs = [x for xs in xss for x in xs]
         y = torch.stack(ys, dim=0)
         return xs, y
 
@@ -120,9 +131,10 @@ class Ptbxl(Data):
             _Augment(self.train_ds, self.trim_prob, self.trim_min),
             self.batch_size,
             shuffle=True,
-            collate_fn=self._collate)
+            collate_fn=self._collate_train)
         val_dl = tud.DataLoader(
-            self.val_ds, self.batch_size,
+            _TestAugment(self.val_ds, self.val_aug, self.trim_min),
+            self.batch_size,
             shuffle=False,
-            collate_fn=self._collate)
+            collate_fn=self._collate_val)
         yield train_dl, val_dl

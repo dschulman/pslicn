@@ -57,7 +57,7 @@ class Step(experiment.Step):
         self.auroc = tmet.AUROC(compute_on_step=False, num_classes=n_cls, average=None)
         self.confusion = tmet.ConfusionMatrix(compute_on_step=False, num_classes=n_cls)
 
-    def _step(self, model: nn.Module, batch: Any) -> Tuple[torch.Tensor, int]:
+    def _step(self, model: nn.Module, batch: Any, phase: experiment.Phase) -> Tuple[torch.Tensor, int]:
         x, y = batch
         z = model(x)
         loss = self.loss(z, y)
